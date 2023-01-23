@@ -23,6 +23,7 @@ namespace RockWizTest
                 .ConfigureServices((hostContext, services) =>
                 {
                     services.AddSingleton<MainWindow>();
+                    services.AddSingleton<IUIAService, UIAService>();
                     services.AddFormFactory<PredictionList>();
                     services.AddHttpClient<IWordPredictionService, WordPredictionService>(client =>
                     {

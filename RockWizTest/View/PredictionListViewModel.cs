@@ -17,8 +17,7 @@ namespace RockWizTest.View
 
         private readonly IWordPredictionService _wordPredictionService;
         private readonly ICustomWordPredictionService _customWordPredictionService;
-
-        private IntPtr? _windowHandle;
+        private readonly IUIAService _uIAService;
 
         #endregion
 
@@ -36,21 +35,20 @@ namespace RockWizTest.View
 
         #endregion
 
-        public PredictionListViewModel(IWordPredictionService wordPredictionService, ICustomWordPredictionService customWordPredictionService)
+        public PredictionListViewModel(IWordPredictionService wordPredictionService, ICustomWordPredictionService customWordPredictionService, IUIAService uIAService)
         {
             _wordPredictionService = wordPredictionService;
             _customWordPredictionService = customWordPredictionService;
+            _uIAService = uIAService;
             Predictions = new ObservableCollection<Word>();
             CustomPredictions = new ObservableCollection<Word>();
-
-            _windowHandle = GetAutomationElement("notepad");
         }
 
         #region Methods
 
         public async Task LoadPredictions()
         {
-            var posAndText = UIAHelper.GetCaretPositionAndText(_windowHandle);
+            var posAndText = _uIAService.GetCaretPositionAndText();
 
             if (posAndText != null)
             {
@@ -82,7 +80,7 @@ namespace RockWizTest.View
 
         public void ParsePrediction(string prediction)
         {
-            UIAHelper.SetText(_windowHandle, prediction);
+            _uIAService.SetText(prediction);
         }
 
         #endregion

@@ -10,11 +10,11 @@ namespace RockWizTest.View
     /// </summary>
     public partial class PredictionList : Window
     {
-        public PredictionList(IWordPredictionService wordPredictionService, ICustomWordPredictionService customWordPredictionService)
+        public PredictionList(IWordPredictionService wordPredictionService, ICustomWordPredictionService customWordPredictionService, IUIAService uIAService)
         {
             InitializeComponent();
 
-            DataContext = new PredictionListViewModel(wordPredictionService, customWordPredictionService);
+            DataContext = new PredictionListViewModel(wordPredictionService, customWordPredictionService, uIAService);
         }
 
         private void ListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

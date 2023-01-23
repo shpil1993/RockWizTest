@@ -10,11 +10,11 @@ namespace RockWizTest
     /// </summary>
     public partial class MainWindow : Window
     {
-        public MainWindow(IAbstractFactory<PredictionList> predictionList)
+        public MainWindow(IAbstractFactory<PredictionList> predictionList, IUIAService uIAService)
         {
             InitializeComponent();
 
-            DataContext = new MainWindowViewModel(predictionList);
+            DataContext = new MainWindowViewModel(predictionList, uIAService);
         }
     }
 }

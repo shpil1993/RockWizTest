@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using RockWizTest.Helpers;
+using RockWizTest.Services;
 using RockWizTest.View;
 using System.Collections.Generic;
 using System.Windows.Input;
@@ -16,12 +17,14 @@ namespace RockWizTest
         private bool _show;
 
         private readonly IAbstractFactory<PredictionList> _predictionList;
+        private readonly IUIAService _uIAService;
 
         #endregion
 
-        public MainWindowViewModel(IAbstractFactory<PredictionList> predictionList)
+        public MainWindowViewModel(IAbstractFactory<PredictionList> predictionList, IUIAService uIAService)
         {
             _predictionList = predictionList;
+            _uIAService = uIAService;
         }
 
         #region Commands
@@ -63,6 +66,8 @@ namespace RockWizTest
 
             if (_show! == false)
             {
+                _uIAService.GetUIAElement();
+
                 predictionList.Show(); 
                 
                 _show = true;
