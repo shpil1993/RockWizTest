@@ -1,0 +1,22 @@
+﻿<Window x:Class="RockWizTest.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:RockWizTest"
+        xmlns:bh="http://schemas.microsoft.com/xaml/behaviors"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="400" Width="800">
+
+    <bh:Interaction.Triggers>
+        <bh:EventTrigger EventName="Loaded">
+            <bh:InvokeCommandAction Command="{Binding LoadedCommand}"/>
+        </bh:EventTrigger>
+        <bh:EventTrigger EventName="Closing">
+            <bh:InvokeCommandAction Command="{Binding ClosingCommand}"/>
+        </bh:EventTrigger>
+    </bh:Interaction.Triggers>
+
+    <Grid>
+    </Grid>
+</Window>
