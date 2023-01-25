@@ -4,6 +4,7 @@ using RockWizTest.Model;
 using RockWizTest.Services;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Input;
 
 namespace RockWizTest
@@ -16,6 +17,7 @@ namespace RockWizTest
         private readonly ICustomWordPredictionService _customWordPredictionService;
         private readonly IUIAService _uIAService;
         private readonly GlobalKeyboardHook _globalKeyboardHook;
+        private readonly DebounceDispatcher _debounceDispatcher;
 
         #endregion
 
@@ -38,6 +40,7 @@ namespace RockWizTest
             _wordPredictionService = wordPredictionService;
             _customWordPredictionService = customWordPredictionService;
             _uIAService = uIAService;
+            _debounceDispatcher = new DebounceDispatcher();
             _globalKeyboardHook = new GlobalKeyboardHook();
             _globalKeyboardHook.KeyboardPressed += KeyboardPressed;
             Predictions = new ObservableCollection<Word>();
@@ -74,7 +77,12 @@ namespace RockWizTest
 
         #region Helpers
 
-        private async void KeyboardPressed(object? sender, GlobalKeyboardHookEventArgs e)
+        private void KeyboardPressed(object? sender, GlobalKeyboardHookEventArgs e)
+        {
+            _debounceDispatcher.Debounce(100, (o) => { ReadElementText(); });
+        }
+
+        private async void ReadElementText()
         {
             var posAndText = _uIAService.GetCaretPositionAndText();
 
