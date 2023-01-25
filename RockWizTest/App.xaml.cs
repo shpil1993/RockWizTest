@@ -2,9 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RockWizTest.Db;
-using RockWizTest.Helpers;
 using RockWizTest.Services;
-using RockWizTest.View;
 using System;
 using System.Windows;
 

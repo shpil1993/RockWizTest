@@ -1,7 +1,5 @@
-﻿using RockWizTest.Helpers;
-using RockWizTest.Model;
+﻿using RockWizTest.Model;
 using RockWizTest.Services;
-using RockWizTest.View;
 using System.Windows;
 using System.Windows.Controls;
 
