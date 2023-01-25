@@ -1,8 +1,9 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using RockWizTest.Helpers;
+using RockWizTest.Model;
 using RockWizTest.Services;
-using RockWizTest.View;
-using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
 using System.Windows.Input;
 
 namespace RockWizTest
@@ -11,34 +12,52 @@ namespace RockWizTest
     {
         #region Fields
 
-        private int _id;
-        private string? _message;
-
-        private bool _show;
-
-        private readonly IAbstractFactory<PredictionList> _predictionList;
+        private readonly IWordPredictionService _wordPredictionService;
+        private readonly ICustomWordPredictionService _customWordPredictionService;
         private readonly IUIAService _uIAService;
+        private readonly GlobalKeyboardHook _globalKeyboardHook;
 
         #endregion
 
-        public MainWindowViewModel(IAbstractFactory<PredictionList> predictionList, IUIAService uIAService)
+        #region Properties
+
+        /// <summary>
+        /// Collection to display predictions from server
+        /// </summary>
+        public ObservableCollection<Word> Predictions { get; set; }
+
+        /// <summary>
+        /// Collection to display custom predictions
+        /// </summary>
+        public ObservableCollection<Word> CustomPredictions { get; set; }
+
+        #endregion
+
+        public MainWindowViewModel(IWordPredictionService wordPredictionService, ICustomWordPredictionService customWordPredictionService, IUIAService uIAService)
         {
-            _predictionList = predictionList;
+            _wordPredictionService = wordPredictionService;
+            _customWordPredictionService = customWordPredictionService;
             _uIAService = uIAService;
+            _globalKeyboardHook = new GlobalKeyboardHook();
+            _globalKeyboardHook.KeyboardPressed += KeyboardPressed;
+            Predictions = new ObservableCollection<Word>();
+            CustomPredictions = new ObservableCollection<Word>();
         }
+
+        #region Methods
+
+        public void ParsePrediction(string prediction)
+        {
+            _globalKeyboardHook.KeyboardPressed -= KeyboardPressed;
+
+            _uIAService.SetText(prediction);
+
+            _globalKeyboardHook.KeyboardPressed += KeyboardPressed;
+        }
+
+        #endregion
 
         #region Commands
-
-        #region LoadedCommand
-
-        public ICommand LoadedCommand => new RelayCommand(Loaded); 
-
-        public void Loaded()
-        {
-            _id = GlobalKeyboardHook.Instance.Hook(new List<Key>() { Key.LeftCtrl, Key.G }, KeysPushed, out _message);
-        }
-
-        #endregion
 
         #region ClosingCommand
 
@@ -46,7 +65,7 @@ namespace RockWizTest
 
         public void Closing()
         {
-            GlobalKeyboardHook.Instance.UnHook(_id);
+            _globalKeyboardHook?.Dispose();
         }
 
         #endregion
@@ -55,22 +74,35 @@ namespace RockWizTest
 
         #region Helpers
 
-        private void KeysPushed()
+        private async void KeyboardPressed(object? sender, GlobalKeyboardHookEventArgs e)
         {
-            var predictionList = _predictionList.Create();
+            var posAndText = _uIAService.GetCaretPositionAndText();
 
-            predictionList.Closing += (s, e) =>
+            if (posAndText != null)
             {
-                _show = false;
-            };
+                var text = posAndText.Value.Item2.Split(" ").Last().ToLower();
 
-            if (_show! == false)
-            {
-                _uIAService.GetUIAElement();
+                var predictions = await _wordPredictionService.GetWordPrediction("en-GB", posAndText.Value.Item2);
+                var predictions2 = await _customWordPredictionService.GetPredictions(text);
 
-                predictionList.Show(); 
-                
-                _show = true;
+                Predictions.Clear();
+                CustomPredictions.Clear();
+
+                if (predictions != null)
+                {
+                    foreach (var item in predictions.Take(10))
+                    {
+                        Predictions.Add(item);
+                    }
+                }
+
+                if (predictions2 != null)
+                {
+                    foreach (var item in predictions2.Take(10))
+                    {
+                        CustomPredictions.Add(item);
+                    }
+                }
             }
         }
 

@@ -6,17 +6,38 @@
         xmlns:local="clr-namespace:RockWizTest"
         xmlns:bh="http://schemas.microsoft.com/xaml/behaviors"
         mc:Ignorable="d"
-        Title="MainWindow" Height="400" Width="800">
+        Height="200" Width="200" ResizeMode="NoResize" Topmost="True" WindowStartupLocation="Manual">
 
     <bh:Interaction.Triggers>
-        <bh:EventTrigger EventName="Loaded">
-            <bh:InvokeCommandAction Command="{Binding LoadedCommand}"/>
-        </bh:EventTrigger>
         <bh:EventTrigger EventName="Closing">
             <bh:InvokeCommandAction Command="{Binding ClosingCommand}"/>
         </bh:EventTrigger>
     </bh:Interaction.Triggers>
 
     <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition/>
+            <ColumnDefinition/>
+        </Grid.ColumnDefinitions>
+        <StackPanel Orientation="Vertical">
+            <TextBlock Text="Custom" HorizontalAlignment="Center"/>
+            <ListBox ItemsSource="{Binding CustomPredictions, UpdateSourceTrigger=PropertyChanged}" SelectionChanged="ListBox_SelectionChanged">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Value}"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </StackPanel>
+        <StackPanel Orientation="Vertical" Grid.Column="1">
+            <TextBlock Text="Server" HorizontalAlignment="Center"/>
+            <ListBox ItemsSource="{Binding Predictions, UpdateSourceTrigger=PropertyChanged}" SelectionChanged="ListBox_SelectionChanged">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Value}"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </StackPanel>
     </Grid>
 </Window>

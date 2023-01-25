@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Windows.Automation;
 using System.Windows.Forms;
 using UIAutomationClient;
 
@@ -25,11 +27,16 @@ namespace RockWizTest.Services
 
         public void GetUIAElement()
         {
-            cUIAutomationElement = cUIAutomation8.GetFocusedElement();
+            if (cUIAutomationElement == null || !cUIAutomationElement.Equals(cUIAutomation8.GetFocusedElement()))
+            {
+                cUIAutomationElement = cUIAutomation8.GetFocusedElement(); 
+            }
         }
 
         public (int, string)? GetCaretPositionAndText()
         {
+            GetUIAElement();
+
             if (cUIAutomationElement != null)
             {
                 var guid = typeof(IUIAutomationTextPattern2).GUID;

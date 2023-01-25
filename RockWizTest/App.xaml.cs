@@ -24,7 +24,6 @@ namespace RockWizTest
                 {
                     services.AddSingleton<MainWindow>();
                     services.AddSingleton<IUIAService, UIAService>();
-                    services.AddFormFactory<PredictionList>();
                     services.AddHttpClient<IWordPredictionService, WordPredictionService>(client =>
                     {
                         client.BaseAddress = new Uri("https://services.lingapps.dk/");

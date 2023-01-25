@@ -1,223 +1,75 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Input;
 
 namespace RockWizTest.Helpers
 {
-    /// <summary>
-    /// Provide a way to handle a global keybourd hooks
-    /// </summary>
-    public sealed class GlobalKeyboardHook : IDisposable
+    class GlobalKeyboardHookEventArgs : HandledEventArgs
     {
-        private const int WH_KEYBOARD_LL = 13;
-        private const int WM_KEYDOWN = 0x0100;
-        private const int WM_KEYUP = 0x0101;
-        private LowLevelKeyboardProc _proc;
-        private readonly IntPtr _hookId = IntPtr.Zero;
-        private static GlobalKeyboardHook _instance;
-        private Dictionary<int, KeyValuePair<KeyCombination, HookActions>> _hookEvents;
-        private bool _disposed;
-        private KeyCombination _pressedKeys;
+        public GlobalKeyboardHook.KeyboardState KeyboardState { get; private set; }
+        public GlobalKeyboardHook.LowLevelKeyboardInputEvent KeyboardData { get; private set; }
 
-        /// <summary>
-        /// Return a singleton instance of <see cref="GlobalKeyboardHook"/>
-        /// </summary>
-        public static GlobalKeyboardHook Instance
+        public GlobalKeyboardHookEventArgs(
+            GlobalKeyboardHook.LowLevelKeyboardInputEvent keyboardData,
+            GlobalKeyboardHook.KeyboardState keyboardState)
         {
-            get
+            KeyboardData = keyboardData;
+            KeyboardState = keyboardState;
+        }
+    }
+
+    class GlobalKeyboardHook : IDisposable
+    {
+        public event EventHandler<GlobalKeyboardHookEventArgs> KeyboardPressed;
+
+        public GlobalKeyboardHook()
+        {
+            _windowsHookHandle = IntPtr.Zero;
+            _user32LibraryHandle = IntPtr.Zero;
+            _hookProc = LowLevelKeyboardProc;
+
+            _user32LibraryHandle = LoadLibrary("User32");
+            if (_user32LibraryHandle == IntPtr.Zero)
             {
-                Interlocked.CompareExchange(ref _instance, new GlobalKeyboardHook(), null);
-                return _instance;
+                int errorCode = Marshal.GetLastWin32Error();
+                throw new Win32Exception(errorCode, $"Failed to load library 'User32.dll'. Error {errorCode}: {new Win32Exception(Marshal.GetLastWin32Error()).Message}.");
+            }
+
+            _windowsHookHandle = SetWindowsHookEx(WH_KEYBOARD_LL, _hookProc, _user32LibraryHandle, 0);
+            if (_windowsHookHandle == IntPtr.Zero)
+            {
+                int errorCode = Marshal.GetLastWin32Error();
+                throw new Win32Exception(errorCode, $"Failed to adjust keyboard hooks for '{Process.GetCurrentProcess().ProcessName}'. Error {errorCode}: {new Win32Exception(Marshal.GetLastWin32Error()).Message}.");
             }
         }
 
-        private GlobalKeyboardHook()
+        protected virtual void Dispose(bool disposing)
         {
-            _proc = HookCallback;
-            _hookEvents = new Dictionary<int, KeyValuePair<KeyCombination, HookActions>>();
-            _hookId = SetHook(_proc);
-            _pressedKeys = new KeyCombination();
-        }
-
-        /// <summary>
-        /// Register a keyboard hook event
-        /// </summary>
-        /// <param name="keys">The short keys. minimum is two keys</param>
-        /// <param name="execute">The action to run when the key ocmbination has pressed</param>
-        /// <param name="message">Empty if no error occurred otherwise error message</param>
-        /// <param name="runAsync">True if the action should execute in the background. -Be careful from thread affinity- Default is false</param>
-        /// <param name="dispose">An action to run when unsubscribing from keyboard hook. can be null</param>
-        /// <returns>Event id to use when unregister</returns>
-        public int Hook(List<Key> keys, Action execute, out string message, bool runAsync = false, Action<object> dispose = null)
-        {
-            if (_hookEvents == null)
+            if (disposing)
             {
-                message = "Can't register";
-                return -1;
-            }
-
-            if (keys == null || execute == null)
-            {
-                message = "'keys' and 'execute' can't be null";
-                return -1;
-            }
-
-            if (keys.Count < 2)
-            {
-                message = "You must provide at least two keys";
-                return -1;
-            }
-
-            if (!ValidateKeys(keys))
-            {
-                message = "Unallowed key. Only 'shift', 'ctrl' and 'a' - 'z' are allowed";
-                return -1;
-            }
-
-            var kc = new KeyCombination(keys);
-            int id = kc.GetHashCode();
-            if (_hookEvents.ContainsKey(id))
-            {
-                message = "The key combination is already exist it the application";
-                return -1;
-            }
-
-            Action asyncAction = null;
-            if (runAsync)
-                asyncAction = () => Task.Run(() => execute);
-
-            _hookEvents[id] = new KeyValuePair<KeyCombination, HookActions>(kc, new HookActions(asyncAction ?? execute, dispose));
-            message = string.Empty;
-            return id;
-        }
-
-        private bool ValidateKeys(IEnumerable<Key> keys)
-        {
-            return keys.All(t => IsKeyValid((int)t));
-        }
-
-        private bool IsKeyValid(int key)
-        {
-            // 'alt' is sys key and hence is disallowed.
-            // a - z and shift, ctrl. 
-            return key >= 44 && key <= 69 || key >= 116 && key <= 119;
-        }
-
-        /// <summary>
-        /// Un register a keyboard hook event
-        /// </summary>
-        /// <param name="id">event id to remove</param>
-        /// <param name="obj">parameter to pass to dispose method</param>
-        public void UnHook(int id, object obj = null)
-        {
-            if (_hookEvents == null || id < 0 || !_hookEvents.ContainsKey(id)) return;
-
-            var hook = _hookEvents[id];
-
-            if (hook.Value != null && hook.Value.Dispose != null)
-            {
-                try
+                if (_windowsHookHandle != IntPtr.Zero)
                 {
-                    hook.Value.Dispose(obj);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(ex.Message);
-                }
-            }
-
-            _hookEvents.Remove(id);
-        }
-
-        private IntPtr SetHook(LowLevelKeyboardProc proc)
-        {
-            using (Process curProcess = Process.GetCurrentProcess())
-            using (ProcessModule curModule = curProcess.MainModule)
-            {
-                return SetWindowsHookEx(WH_KEYBOARD_LL, proc, GetModuleHandle(curModule.ModuleName), 0);
-            }
-        }
-
-        private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
-
-        private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
-        {
-            if (nCode < 0)
-                return CallNextHookEx(_hookId, nCode, wParam, lParam);
-
-            var result = new IntPtr(0);
-            if (wParam == (IntPtr)WM_KEYDOWN)
-            {
-                _pressedKeys.Add(KeyInterop.KeyFromVirtualKey(Marshal.ReadInt32(lParam)));
-                if (_pressedKeys.Count >= 2)
-                {
-                    var keysToAction = _hookEvents.Values.FirstOrDefault(val => val.Key.Equals(_pressedKeys));
-                    if (keysToAction.Value != null)
+                    if (!UnhookWindowsHookEx(_windowsHookHandle))
                     {
-                        keysToAction.Value.Exceute();
-                        result = new IntPtr(1);
+                        int errorCode = Marshal.GetLastWin32Error();
+                        throw new Win32Exception(errorCode, $"Failed to remove keyboard hooks for '{Process.GetCurrentProcess().ProcessName}'. Error {errorCode}: {new Win32Exception(Marshal.GetLastWin32Error()).Message}.");
                     }
+                    _windowsHookHandle = IntPtr.Zero;
+
+                    _hookProc -= LowLevelKeyboardProc;
                 }
             }
-            else if (wParam == (IntPtr)WM_KEYUP)
+
+            if (_user32LibraryHandle != IntPtr.Zero)
             {
-                _pressedKeys.Clear();
-            }
-
-            return CallNextHookEx(_hookId, nCode, wParam, lParam);
-        }
-
-        #region extern
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr GetModuleHandle(string lpModuleName);
-
-        #endregion
-
-        #region IDsiposable
-
-        private void Dispose(bool dispose)
-        {
-            try
-            {
-                if (_disposed)
-                    return;
-
-                UnhookWindowsHookEx(_hookId);
-                if (dispose)
+                if (!FreeLibrary(_user32LibraryHandle)) // reduces reference to library by 1.
                 {
-                    _proc = null;
-                    _hookEvents = null;
-                    _pressedKeys = null;
-                    GC.SuppressFinalize(this);
+                    int errorCode = Marshal.GetLastWin32Error();
+                    throw new Win32Exception(errorCode, $"Failed to unload library 'User32.dll'. Error {errorCode}: {new Win32Exception(Marshal.GetLastWin32Error()).Message}.");
                 }
-                _disposed = true;
+                _user32LibraryHandle = IntPtr.Zero;
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message);
-            }
-        }
-
-        public void Dispose()
-        {
-            Dispose(true);
         }
 
         ~GlobalKeyboardHook()
@@ -225,94 +77,115 @@ namespace RockWizTest.Helpers
             Dispose(false);
         }
 
-        #endregion
-
-        private class HookActions
+        public void Dispose()
         {
-            public HookActions(Action excetue, Action<object> dispose = null)
-            {
-                Exceute = excetue;
-                Dispose = dispose;
-            }
-
-            public Action Exceute { get; set; }
-            public Action<object> Dispose { get; set; }
-
+            Dispose(true);
+            GC.SuppressFinalize(this);
         }
 
-        private class KeyCombination : IEquatable<KeyCombination>
+        private IntPtr _windowsHookHandle;
+        private IntPtr _user32LibraryHandle;
+        private HookProc _hookProc;
+
+        delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr LoadLibrary(string lpFileName);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+        private static extern bool FreeLibrary(IntPtr hModule);
+
+        /// <summary>
+        /// The SetWindowsHookEx function installs an application-defined hook procedure into a hook chain.
+        /// You would install a hook procedure to monitor the system for certain types of events. These events are
+        /// associated either with a specific thread or with all threads in the same desktop as the calling thread.
+        /// </summary>
+        /// <param name="idHook">hook type</param>
+        /// <param name="lpfn">hook procedure</param>
+        /// <param name="hMod">handle to application instance</param>
+        /// <param name="dwThreadId">thread identifier</param>
+        /// <returns>If the function succeeds, the return value is the handle to the hook procedure.</returns>
+        [DllImport("USER32", SetLastError = true)]
+        static extern IntPtr SetWindowsHookEx(int idHook, HookProc lpfn, IntPtr hMod, int dwThreadId);
+
+        /// <summary>
+        /// The UnhookWindowsHookEx function removes a hook procedure installed in a hook chain by the SetWindowsHookEx function.
+        /// </summary>
+        /// <param name="hhk">handle to hook procedure</param>
+        /// <returns>If the function succeeds, the return value is true.</returns>
+        [DllImport("USER32", SetLastError = true)]
+        public static extern bool UnhookWindowsHookEx(IntPtr hHook);
+
+        /// <summary>
+        /// The CallNextHookEx function passes the hook information to the next hook procedure in the current hook chain.
+        /// A hook procedure can call this function either before or after processing the hook information.
+        /// </summary>
+        /// <param name="hHook">handle to current hook</param>
+        /// <param name="code">hook code passed to hook procedure</param>
+        /// <param name="wParam">value passed to hook procedure</param>
+        /// <param name="lParam">value passed to hook procedure</param>
+        /// <returns>If the function succeeds, the return value is true.</returns>
+        [DllImport("USER32", SetLastError = true)]
+        static extern IntPtr CallNextHookEx(IntPtr hHook, int code, IntPtr wParam, IntPtr lParam);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct LowLevelKeyboardInputEvent
         {
-            private readonly bool _canModify;
-            public KeyCombination(List<Key> keys)
+            /// <summary>
+            /// A virtual-key code. The code must be a value in the range 1 to 254.
+            /// </summary>
+            public int VirtualCode;
+
+            /// <summary>
+            /// A hardware scan code for the key. 
+            /// </summary>
+            public int HardwareScanCode;
+
+            /// <summary>
+            /// The extended-key flag, event-injected Flags, context code, and transition-state flag. This member is specified as follows. An application can use the following values to test the keystroke Flags. Testing LLKHF_INJECTED (bit 4) will tell you whether the event was injected. If it was, then testing LLKHF_LOWER_IL_INJECTED (bit 1) will tell you whether or not the event was injected from a process running at lower integrity level.
+            /// </summary>
+            public int Flags;
+
+            /// <summary>
+            /// The time stamp stamp for this message, equivalent to what GetMessageTime would return for this message.
+            /// </summary>
+            public int TimeStamp;
+
+            /// <summary>
+            /// Additional information associated with the message. 
+            /// </summary>
+            public IntPtr AdditionalInformation;
+        }
+
+        public const int WH_KEYBOARD_LL = 13;
+
+        public enum KeyboardState
+        {
+            KeyDown = 0x0100,
+            KeyUp = 0x0101,
+            SysKeyDown = 0x0104,
+            SysKeyUp = 0x0105
+        }
+
+        public IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam)
+        {
+            bool fEatKeyStroke = false;
+
+            var wparamTyped = wParam.ToInt32();
+            if (Enum.IsDefined(typeof(KeyboardState), wparamTyped))
             {
-                _keys = keys ?? new List<Key>();
+                object o = Marshal.PtrToStructure(lParam, typeof(LowLevelKeyboardInputEvent));
+                LowLevelKeyboardInputEvent p = (LowLevelKeyboardInputEvent)o;
+
+                var eventArguments = new GlobalKeyboardHookEventArgs(p, (KeyboardState)wparamTyped);
+
+                EventHandler<GlobalKeyboardHookEventArgs> handler = KeyboardPressed;
+                handler?.Invoke(this, eventArguments);
+
+                fEatKeyStroke = eventArguments.Handled;
             }
 
-            public KeyCombination()
-            {
-                _keys = new List<Key>();
-                _canModify = true;
-            }
-
-            public void Add(Key key)
-            {
-                if (_canModify)
-                {
-                    _keys.Add(key);
-                }
-            }
-
-            public void Remove(Key key)
-            {
-                if (_canModify)
-                {
-                    _keys.Remove(key);
-                }
-            }
-
-            public void Clear()
-            {
-                if (_canModify)
-                {
-                    _keys.Clear();
-                }
-            }
-
-            public int Count { get { return _keys.Count; } }
-
-            private readonly List<Key> _keys;
-
-            public bool Equals(KeyCombination other)
-            {
-                return other._keys != null && _keys != null && KeysEqual(other._keys);
-            }
-
-            private bool KeysEqual(List<Key> keys)
-            {
-                if (keys == null || _keys == null || keys.Count != _keys.Count) return false;
-                for (int i = 0; i < _keys.Count; i++)
-                {
-                    if (_keys[i] != keys[i])
-                        return false;
-                }
-                return true;
-            }
-
-            public override int GetHashCode()
-            {
-                if (_keys == null) 
-                    return 0;
-
-                unchecked
-                {
-                    int hash = 19;
-                    for (int i = 0; i < _keys.Count; i++)
-                    {
-                        hash = hash * 31 + _keys[i].GetHashCode();
-                    }
-                    return hash;
-                }
-            }
+            return fEatKeyStroke ? (IntPtr)1 : CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
         }
     }
 }
