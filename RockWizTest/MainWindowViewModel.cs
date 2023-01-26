@@ -90,11 +90,14 @@ namespace RockWizTest
             {
                 var text = posAndText.Value.Item2.Split(" ").Last().ToLower();
 
-                var predictions = await _wordPredictionService.GetWordPrediction("en-GB", posAndText.Value.Item2);
-                var predictions2 = await _customWordPredictionService.GetPredictions(text);
-
                 Predictions.Clear();
                 CustomPredictions.Clear();
+
+                if (string.IsNullOrWhiteSpace(text))
+                    return;
+
+                var predictions = await _wordPredictionService.GetWordPrediction("en-GB", posAndText.Value.Item2);
+                var predictions2 = await _customWordPredictionService.GetPredictions(text);
 
                 if (predictions != null)
                 {
